@@ -15,7 +15,7 @@ import os, tarfile
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
-from discretize import TensorMesh
+from discretize import TensorMesh, SimplexMesh
 #from pymatsolver import PardisoSolver
 
 from SimPEG.utils import mkvc
@@ -26,8 +26,9 @@ from SimPEG import (
 
 from SimPEG.utils import mkvc
 import SimPEG.electromagnetics.time_domain as tdem
+import SimPEG.electromagnetics.utils.em1d_utils
 from SimPEG.electromagnetics.utils.em1d_utils import get_2d_mesh,plot_layer, get_vertical_discretization_time
-from SimPEG.regularization import LaterallyConstrained
+from SimPEG.regularization import LaterallyConstrained, RegularizationMesh
 
 import scipy.stats
 
@@ -168,25 +169,45 @@ class XYZSystem(object):
         return dmis
     
     def make_regularization(self, thicknesses):
-        hz = np.r_[thicknesses, thicknesses[-1]]
-        reg = LaterallyConstrained(
-            get_2d_mesh(len(self.xyz.flightlines), hz),
-            mapping=maps.IdentityMap(nP=self.n_param(thicknesses)),
-            alpha_s = 0.01,
-            alpha_x = 1.,
-            alpha_y = 1.,
-        )
-        reg.get_grad_horizontal(self.xyz.flightlines[["x", "y"]], hz, dim=2, use_cell_weights=True)
-        ps, px, py = 0, 0, 0
-        reg.norms = np.c_[ps, px, py, 0]
-        reg.mref = np.log(np.ones(self.n_param(thicknesses)) * 1/self.start_res)
-        reg.mrefInSmooth = False
-        return reg
-    
+        if False:
+            hz = np.r_[thicknesses, thicknesses[-1]]
+            reg = LaterallyConstrained(
+                get_2d_mesh(len(self.xyz.flightlines), hz),
+                mapping=maps.IdentityMap(nP=self.n_param(thicknesses)),
+                alpha_s = 0.01,
+                alpha_r = 1.,
+                alpha_z = 1.)
+            # reg.get_grad_horizontal(self.xyz.flightlines[["x", "y"]], hz, dim=2, use_cell_weights=True)
+            # ps, px, py = 0, 0, 0
+            # reg.norms = np.c_[ps, px, py, 0]
+            reg.mref = np.log(np.ones(self.n_param(thicknesses)) * 1/self.start_res)
+            # reg.mrefInSmooth = False
+            return reg
+        else:
+            coords = self.xyz.flightlines[["x", "y"]].astype(float).values
+            # FIXME: Triangulation fails if all coords are on a line, as in a typical synthetic case...
+            coords[:,1] += np.random.randn(len(coords)) * 1e-10
+            tri = Delaunay(coords)
+            hz = np.r_[thicknesses, thicknesses[-1]]
+
+            mesh_radial = SimplexMesh(tri.points, tri.simplices)
+            mesh_vertical = SimPEG.electromagnetics.utils.em1d_utils.set_mesh_1d(hz)
+            mesh_reg = [mesh_radial, mesh_vertical]
+            n_param = int(mesh_radial.n_nodes * mesh_vertical.nC)
+            reg_map = SimPEG.maps.IdentityMap(nP=n_param)    # Mapping between the model and regularization
+            reg = SimPEG.regularization.LaterallyConstrained(
+                mesh_reg, mapping=reg_map,
+                alpha_s = 1e-10,
+                alpha_r = 1.,
+                alpha_z = 1.,
+            )
+            reg.mref = np.log(np.ones(self.n_param(thicknesses)) * 1/self.start_res)
+            return reg
+            
     def make_directives(self):
         return [
             directives.BetaEstimate_ByEig(beta0_ratio=10),
-            directives.SaveOutputEveryIteration(save_txt=False),
+#            directives.SaveOutputEveryIteration(save_txt=False),
             directives.Update_IRLS(
                 max_irls_iterations=30,
                 minGNiter=1,
