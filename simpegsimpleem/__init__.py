@@ -137,10 +137,18 @@ class XYZSystem(object):
         
     def make_survey(self):
         times = self.times
+        systems = [
+            self.make_system(
+                idx,
+                self.xyz.flightlines.loc[
+                    idx, [self.xyz.x_column, self.xyz.y_column, self.xyz.alt_column]
+                ].astype(float).values,
+                times)
+            for idx in range(0, len(self.xyz.flightlines))]
         return tdem.Survey([
-            self.make_system(idx, self.xyz.flightlines.loc[idx, ["x", "y", "tx_alt"]].values, times)
-            for idx in range(0, len(self.xyz.flightlines))
-        ])
+            source
+            for sources in systems
+            for source in sources])
 
     def n_param(self, thicknesses):
         return (len(thicknesses)+1)*len(self.xyz.flightlines)
@@ -156,8 +164,11 @@ class XYZSystem(object):
     def make_data(self, survey):
         return data.Data(
             survey,
-            dobs=self.xyz.dbdt_ch1gt.values.flatten(),
-            standard_deviation=self.xyz.dbdt_std_ch1gt.values.flatten())
+            dobs=self.xyz.dbdt_ch1gt.values.flatten()),
+#            standard_deviation=self.xyz.dbdt_std_ch1gt.values.flatten())
+    
+    def make_misfit_weights(self, thicknesses):
+        return 1./self.xyz.dbdt_std_ch1gt.values.flatten()
     
     def make_misfit(self, thicknesses):
         survey = self.make_survey()
@@ -165,9 +176,12 @@ class XYZSystem(object):
         dmis = data_misfit.L2DataMisfit(
             simulation=self.make_simulation(survey, thicknesses),
             data=self.make_data(survey))
-        dmis.W = 1./self.xyz.dbdt_std_ch1gt.values.flatten()
+        dmis.W = self.make_misfit_weights(thicknesses)
         return dmis
     
+    alpha_s = 1e-10
+    alpha_r = 1.
+    alpha_z = 1.
     def make_regularization(self, thicknesses):
         if False:
             hz = np.r_[thicknesses, thicknesses[-1]]
@@ -184,9 +198,9 @@ class XYZSystem(object):
             # reg.mrefInSmooth = False
             return reg
         else:
-            coords = self.xyz.flightlines[["x", "y"]].astype(float).values
+            coords = self.xyz.flightlines[[self.xyz.x_column, self.xyz.y_column]].astype(float).values
             # FIXME: Triangulation fails if all coords are on a line, as in a typical synthetic case...
-            coords[:,1] += np.random.randn(len(coords)) * 1e-10
+            coords[:,1] += np.random.randn(len(coords)) * 5 #1e-10
             tri = Delaunay(coords)
             hz = np.r_[thicknesses, thicknesses[-1]]
 
@@ -197,9 +211,9 @@ class XYZSystem(object):
             reg_map = SimPEG.maps.IdentityMap(nP=n_param)    # Mapping between the model and regularization
             reg = SimPEG.regularization.LaterallyConstrained(
                 mesh_reg, mapping=reg_map,
-                alpha_s = 1e-10,
-                alpha_r = 1.,
-                alpha_z = 1.,
+                alpha_s = self.alpha_s,
+                alpha_r = self.alpha_r,
+                alpha_z = self.alpha_z,
             )
             reg.mref = np.log(np.ones(self.n_param(thicknesses)) * 1/self.start_res)
             return reg
@@ -207,14 +221,19 @@ class XYZSystem(object):
     def make_directives(self):
         return [
             directives.BetaEstimate_ByEig(beta0_ratio=10),
+            SimPEG.directives.BetaSchedule(coolingFactor=2, coolingRate=1),
+            SimPEG.directives.TargetMisfit()
+
 #            directives.SaveOutputEveryIteration(save_txt=False),
-            directives.Update_IRLS(
-                max_irls_iterations=30,
-                minGNiter=1,
-                fix_Jmatrix=True,
-                f_min_change = 1e-3,
-                coolingRate=1),
-            directives.UpdatePreconditioner()]
+            # directives.Update_IRLS(
+            #     max_irls_iterations=30,
+            #     minGNiter=1,
+            #     fix_Jmatrix=True,
+            #     f_min_change = 1e-3,
+            #     coolingRate=1),
+            # directives.UpdatePreconditioner()
+
+        ]
 
     def make_optimizer(self):
         return optimization.InexactGaussNewton(maxIter = 40, maxIterCG=20)
@@ -255,7 +274,9 @@ class XYZSystem(object):
         thicknesses = self.inv.invProb.dmisfit.simulation.thicknesses
         
         self.sparse = self.inverted_model_to_xyz(recovered_model, thicknesses)
-        self.l2 = self.inverted_model_to_xyz(self.inv.invProb.l2model, thicknesses)
+        self.l2 = None
+        if hasattr(self.inv.invProb, "l2model"):
+            self.l2 = self.inverted_model_to_xyz(self.inv.invProb.l2model, thicknesses)
         
         return self.sparse, self.l2
 
@@ -289,7 +310,7 @@ class SingleRecvTEMXYZSystem(XYZSystem):
     #alt = 30
     
     def make_system(self, idx, location, times):
-        return tdem.sources.CircularLoop(
+        return [tdem.sources.CircularLoop(
             location = location,
             receiver_list = [
                 tdem.receivers.PointMagneticFluxTimeDerivative(
@@ -299,5 +320,129 @@ class SingleRecvTEMXYZSystem(XYZSystem):
             waveform = tdem.sources.StepOffWaveform(),
             radius = np.sqrt(self.area/np.pi), 
             current = self.i_max, 
-            i_sounding = idx)
+            i_sounding = idx)]
 
+class SkyTEMSystem(XYZSystem):
+    gate_start_lm=5
+    gate_end_lm=11
+    gate_start_hm=12
+    gate_end_hm=26
+
+    rx_orientation = 'z'
+    tx_orientation = 'z'
+    
+    @classmethod
+    def load_gex(cls, gex):
+        class GexSystem(cls):
+            pass
+        GexSystem.gex = gex
+        return GexSystem   
+    
+    @property
+    def area(self):
+        return self.gex['General']['TxLoopArea']
+    
+    @property
+    def waveform_hm(self):
+        return self.gex['General']['WaveformHMPoint']
+    
+    @property
+    def waveform_lm(self):
+        return self.gex['General']['WaveformLMPoint']
+
+    @property
+    def lm_data(self):
+        return -(self.xyz.gate_ch01.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+    @property
+    def hm_data(self):
+        return -(self.xyz.gate_ch02.values*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+    @property
+    def lm_std(self):
+        return (self.xyz.std_ch01.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+    @property
+    def hm_std(self):
+        return (self.xyz.std_ch02.values*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+    
+    @property
+    def times(self):
+        import emeraldprocessing.tem
+        lmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel1')[:,0]
+        hmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel2')[:,0]
+        
+        return (np.array(lmtimes[self.gate_start_lm:self.gate_end_lm]),
+                np.array(hmtimes[self.gate_start_hm:self.gate_end_hm]))    
+    
+    def make_waveforms(self):
+        time_input_currents_hm = self.waveform_hm[:,0]
+        input_currents_hm = self.waveform_hm[:,1]
+        time_input_currents_lm = self.waveform_lm[:,0]
+        input_currents_lm = self.waveform_lm[:,1]
+
+        waveform_hm = tdem.sources.PiecewiseLinearWaveform(time_input_currents_hm, input_currents_hm)
+        waveform_lm = tdem.sources.PiecewiseLinearWaveform(time_input_currents_lm, input_currents_lm)
+        return waveform_lm, waveform_hm
+    
+    def make_system(self, idx, location, times):
+        # FIXME: Martin says set z to altitude, not z (subtract topo), original code from seogi doesn't work!
+        # Note: location[2] is already == altitude
+        receiver_location = (location[0] + self.gex['General']['RxCoilPosition'][0],
+                             location[1],
+                             location[2] + np.abs(self.gex['General']['RxCoilPosition'][2]))
+        waveform_lm, waveform_hm = self.make_waveforms()        
+
+        return [
+            tdem.sources.MagDipole(
+                [tdem.receivers.PointMagneticFluxTimeDerivative(
+                    receiver_location, times[0], self.rx_orientation)],
+                location=location,
+                waveform=waveform_lm,
+                orientation=self.tx_orientation,
+                i_sounding=idx),
+            tdem.sources.MagDipole(
+                [tdem.receivers.PointMagneticFluxTimeDerivative(
+                    receiver_location, times[1], self.rx_orientation)],
+                location=location,
+                waveform=waveform_hm,
+                orientation=self.tx_orientation,
+                i_sounding=idx)]
+    
+    def make_data_uncert_array(self):
+        dobs = np.hstack((self.lm_data, self.hm_data)).flatten()
+        #uncertainties = np.hstack((self.lm_std, self.hm_std)).flatten()
+        #uncertainties = uncertainties * dobs + 1e-13
+        uncertainties = 0.05*np.abs(dobs) + 1e-13
+        #uncertainties = 0.05*np.abs(dobs) + 1e-13
+        
+        inds_inactive_dobs = np.isnan(dobs)
+        dobs[inds_inactive_dobs] = 9999.
+        uncertainties[inds_inactive_dobs] = np.Inf        
+
+        return dobs, uncertainties
+        
+    def make_data(self, survey):
+        dobs, uncertainties = self.make_data_uncert_array()
+        return SimPEG.data.Data(
+            survey,
+            dobs=dobs,
+            standard_deviation=uncertainties)
+
+    def make_thicknesses(self):
+        # HACK FOR NOW
+        n_layer = 30
+        return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization(n_layer-1, 3, 1.07)
+        
+        if "dep_top" in self.xyz.layer_params:
+            return np.diff(self.xyz.layer_params["dep_top"].values)
+        return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization_time(
+            np.sort(np.concatenate(inv.times)),
+            sigma_background=0.1,
+            n_layer=self.n_layer-1
+        )
+
+    def make_misfit_weights(self, thicknesses):
+        dobs, uncertainties = self.make_data_uncert_array()
+        print("UNCERT", uncertainties)
+        return 1./uncertainties
+
+    n_cpu=6
+    parallel = True
