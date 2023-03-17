@@ -64,12 +64,14 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
     @property
     def lm_data(self):
         dbdt = self.xyz.dbdt_ch1gt.values
+        dbdt = dbdt * self.xyz.model_info.get("scalefactor", 1)
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch1gt == 0, np.nan, dbdt)
         return -(dbdt*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
     @property
     def hm_data(self):
         dbdt = self.xyz.dbdt_ch2gt.values
+        dbdt = dbdt * self.xyz.model_info.get("scalefactor", 1)
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch2gt == 0, np.nan, dbdt)
         return -(dbdt*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
