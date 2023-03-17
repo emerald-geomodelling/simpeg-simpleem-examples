@@ -102,8 +102,9 @@ class XYZSystem(object):
             standard_deviation=uncertainties)
     
     def make_misfit_weights(self, thicknesses):
-        return 1./self.xyz.dbdt_std_ch1gt.values.flatten()
-    
+        dobs, uncertainties = self.make_data_uncert_array()
+        return 1./uncertainties
+
     def make_misfit(self, thicknesses):
         survey = self.make_survey()
 
