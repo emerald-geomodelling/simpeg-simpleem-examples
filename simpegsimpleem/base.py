@@ -55,7 +55,15 @@ class XYZSystem(object):
     @property
     def times(self):
         return np.array(self.xyz.model_info['gate times for channel 1'])
-    
+
+    @property
+    def data_array(self):
+        return self.xyz.dbdt_ch1gt.values.flatten()
+
+    @property
+    def uncert_array(self):
+        return self.xyz.dbdt_std_ch1gt.values.flatten()
+
     def make_thicknesses(self):
         if "dep_top" in self.xyz.layer_params:
             return np.diff(self.xyz.layer_params["dep_top"].values)
@@ -91,19 +99,14 @@ class XYZSystem(object):
             parallel=self.parallel,
             n_cpu=self.n_cpu)    
     
-    def make_data_uncert_array(self):
-        return self.xyz.dbdt_ch1gt.values.flatten(), self.xyz.dbdt_std_ch1gt.values.flatten()
-
     def make_data(self, survey):
-        dobs, uncertainties = self.make_data_uncert_array()
         return data.Data(
             survey,
-            dobs=dobs,
-            standard_deviation=uncertainties)
+            dobs=self.data_array,
+            standard_deviation=self.uncert_array)
     
     def make_misfit_weights(self, thicknesses):
-        dobs, uncertainties = self.make_data_uncert_array()
-        return 1./uncertainties
+        return 1./self.uncert_array
 
     def make_misfit(self, thicknesses):
         survey = self.make_survey()
@@ -188,6 +191,7 @@ class XYZSystem(object):
         
     def inverted_model_to_xyz(self, model, thicknesses):
         xyzsparse = libaarhusxyz.XYZ()
+        xyzsparse.model_info.update(self.xyz.model_info)
         xyzsparse.flightlines = self.xyz.flightlines
         xyzsparse.layer_data["resistivity"] = 1 / np.exp(pd.DataFrame(
             model.reshape((len(self.xyz.flightlines),
@@ -215,15 +219,7 @@ class XYZSystem(object):
         
         return self.sparse, self.l2
 
-    def forward(self):
-        # self.inv.invProb.dmisfit.simulation
-        self.sim = self.make_forward()
-
-        model_cond=np.log(1/self.xyz.resistivity.values)
-        resp = self.sim.dpred(model_cond.flatten())
-
-        resp = resp.reshape((len(self.xyz.flightlines), len(resp) // len(self.xyz.flightlines)))
-
+    def forward_data_to_xyz(self, resp):
         xyzresp = libaarhusxyz.XYZ()
         xyzresp.flightlines = self.xyz.flightlines
         xyzresp.layer_data = {
@@ -234,3 +230,13 @@ class XYZSystem(object):
         xyzresp.model_info["gate times for channel 1"] = list(self.times)
 
         return xyzresp
+    
+    def forward(self):
+        # self.inv.invProb.dmisfit.simulation
+        self.sim = self.make_forward()
+
+        model_cond=np.log(1/self.xyz.resistivity.values)
+        resp = self.sim.dpred(model_cond.flatten())
+
+        resp = resp.reshape((len(self.xyz.flightlines), len(resp) // len(self.xyz.flightlines)))
+        return self.forward_data_to_xyz(resp)

@@ -68,6 +68,7 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch1gt == 0, np.nan, dbdt)
         return -(dbdt*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+    
     @property
     def hm_data(self):
         dbdt = self.xyz.dbdt_ch2gt.values
@@ -75,21 +76,48 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch2gt == 0, np.nan, dbdt)
         return -(dbdt*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+    
     @property
     def lm_std(self):
         return (self.xyz.dbdt_std_ch1gt.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+    
     @property
     def hm_std(self):
         return (self.xyz.dbdt_std_ch2gt.values*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
-    
+
     @property
-    def times(self):
+    def data_array_nan(self):
+        return np.hstack((self.lm_data, self.hm_data)).flatten()
+
+    @property
+    def data_array(self):
+        dobs = self.data_array_nan
+        return np.where(np.isnan(dobs), 9999., dobs)
+    
+    uncertainties_floor = 1e-13
+    uncertainties_data = 0.05 # If None, use data std:s
+    @property
+    def uncert_array(self):
+        if self.uncertainties_data is None:
+            uncertainties = np.hstack((self.lm_std, self.hm_std)).flatten()
+        else:
+            uncertainties = self.uncertainties_data
+        uncertainties = uncertainties * np.abs(self.data_array) + self.uncertainties_floor
+        return np.where(np.isnan(self.data_array_nan), np.Inf, uncertainties)
+
+    @property
+    def times_full(self):
         import emeraldprocessing.tem
         lmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel1')[:,0]
         hmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel2')[:,0]
-        
-        return (np.array(lmtimes[self.gate_start_lm:self.gate_end_lm]),
-                np.array(hmtimes[self.gate_start_hm:self.gate_end_hm]))    
+        return (np.array(lmtimes),
+                np.array(hmtimes))    
+    
+    @property
+    def times(self):
+        lmtimes, hmtimes = self.times_full        
+        return (lmtimes[self.gate_start_lm:self.gate_end_lm],
+                hmtimes[self.gate_start_hm:self.gate_end_hm])    
     
     def make_waveforms(self):
         time_input_currents_hm = self.waveform_hm[:,0]
@@ -125,22 +153,6 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
                 orientation=self.tx_orientation,
                 i_sounding=idx)]
     
-    uncertainties_floor = 1e-13
-    uncertainties_data = 0.05 # If None, use data std:s
-    def make_data_uncert_array(self):
-        dobs = np.hstack((self.lm_data, self.hm_data)).flatten()
-        if self.uncertainties_data is None:
-            uncertainties = np.hstack((self.lm_std, self.hm_std)).flatten()
-        else:
-            uncertainties = self.uncertainties_data
-        uncertainties = uncertainties * np.abs(dobs) + self.uncertainties_floor
-        
-        inds_inactive_dobs = np.isnan(dobs)
-        dobs[inds_inactive_dobs] = 9999.
-        uncertainties[inds_inactive_dobs] = np.Inf        
-
-        return dobs, uncertainties
-
     thicknesses_type = "geometric"
     thicknesses_minimum_dz = 3
     thicknesses_geomtric_factor = 1.07
@@ -159,6 +171,34 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
             )
 
     def make_misfit_weights(self, thicknesses):
-        dobs, uncertainties = self.make_data_uncert_array()
-        print("UNCERT", uncertainties)
-        return 1./uncertainties
+        return 1./self.uncert_array
+
+    def forward_data_to_xyz(self, resp):
+        times_lm, times_hm = self.times_full
+        
+        xyzresp = libaarhusxyz.XYZ()
+        xyzresp.model_info.update(self.xyz.model_info)
+        xyzresp.flightlines = self.xyz.flightlines
+
+        lm = np.full((len(xyzresp.flightlines), len(times_lm)), np.nan)
+        hm = np.full((len(xyzresp.flightlines), len(times_hm)), np.nan)
+
+        gate_count_lm = self.gate_end_lm-self.gate_start_lm
+        gate_count_hm = self.gate_end_hm-self.gate_start_hm
+        lm[:,self.gate_start_lm:self.gate_end_lm] = resp[:,:gate_count_lm]
+        hm[:,self.gate_start_hm:self.gate_end_hm] = resp[:,gate_count_lm:]
+        
+        lm /= self.xyz.model_info.get("scalefactor", 1)
+        hm /= self.xyz.model_info.get("scalefactor", 1)
+
+        xyzresp.layer_data = {
+            "dbdt_ch1gt": pd.DataFrame(lm),
+            "dbdt_ch2gt": pd.DataFrame(hm),
+        }
+
+        # XYZ assumes all receivers have the same times
+        xyzresp.model_info["gate times for channel 1"] = list(times_lm)
+        xyzresp.model_info["gate times for channel 2"] = list(times_hm)
+
+        return xyzresp
+    
