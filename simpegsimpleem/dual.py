@@ -63,10 +63,16 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
 
     @property
     def lm_data(self):
-        return -(self.xyz.dbdt_ch1gt.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+        dbdt = self.xyz.dbdt_ch1gt.values
+        if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
+            dbdt = np.where(self.xyz.dbdt_inuse_ch1gt == 0, np.nan, dbdt)
+        return -(dbdt*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
     @property
     def hm_data(self):
-        return -(self.xyz.dbdt_ch2gt.values*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+        dbdt = self.xyz.dbdt_ch2gt.values
+        if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
+            dbdt = np.where(self.xyz.dbdt_inuse_ch2gt == 0, np.nan, dbdt)
+        return -(dbdt*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
     @property
     def lm_std(self):
         return (self.xyz.dbdt_std_ch1gt.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
