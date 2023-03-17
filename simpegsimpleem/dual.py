@@ -117,12 +117,15 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
                 orientation=self.tx_orientation,
                 i_sounding=idx)]
     
+    uncertainties_floor = 1e-13
+    uncertainties_data = 0.05 # If None, use data std:s
     def make_data_uncert_array(self):
         dobs = np.hstack((self.lm_data, self.hm_data)).flatten()
-        #uncertainties = np.hstack((self.lm_std, self.hm_std)).flatten()
-        #uncertainties = uncertainties * dobs + 1e-13
-        uncertainties = 0.05*np.abs(dobs) + 1e-13
-        #uncertainties = 0.05*np.abs(dobs) + 1e-13
+        if self.uncertainties_data is None:
+            uncertainties = np.hstack((self.lm_std, self.hm_std)).flatten()
+        else:
+            uncertainties = self.uncertainties_data
+        uncertainties = uncertainties * np.abs(dobs) + self.uncertainties_floor
         
         inds_inactive_dobs = np.isnan(dobs)
         dobs[inds_inactive_dobs] = 9999.
