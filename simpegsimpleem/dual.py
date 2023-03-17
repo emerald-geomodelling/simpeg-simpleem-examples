@@ -132,13 +132,6 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         uncertainties[inds_inactive_dobs] = np.Inf        
 
         return dobs, uncertainties
-        
-    def make_data(self, survey):
-        dobs, uncertainties = self.make_data_uncert_array()
-        return SimPEG.data.Data(
-            survey,
-            dobs=dobs,
-            standard_deviation=uncertainties)
 
     thicknesses_type = "geometric"
     thicknesses_minimum_dz = 3
@@ -161,6 +154,3 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         dobs, uncertainties = self.make_data_uncert_array()
         print("UNCERT", uncertainties)
         return 1./uncertainties
-
-    n_cpu=6
-    parallel = True

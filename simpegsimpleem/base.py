@@ -43,7 +43,7 @@ class XYZSystem(object):
     def __init__(self, xyz, **kw):
         self.xyz = xyz
         self.options = kw
-            
+    
     def __getattribute__(self, name):
         options = object.__getattribute__(self, "options")
         if name in options: return options[name]
@@ -91,11 +91,15 @@ class XYZSystem(object):
             parallel=self.parallel,
             n_cpu=self.n_cpu)    
     
+    def make_data_uncert_array(self):
+        return self.xyz.dbdt_ch1gt.values.flatten(), self.xyz.dbdt_std_ch1gt.values.flatten()
+
     def make_data(self, survey):
+        dobs, uncertainties = self.make_data_uncert_array()
         return data.Data(
             survey,
-            dobs=self.xyz.dbdt_ch1gt.values.flatten()),
-#            standard_deviation=self.xyz.dbdt_std_ch1gt.values.flatten())
+            dobs=dobs,
+            standard_deviation=uncertainties)
     
     def make_misfit_weights(self, thicknesses):
         return 1./self.xyz.dbdt_std_ch1gt.values.flatten()
