@@ -137,18 +137,22 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
             dobs=dobs,
             standard_deviation=uncertainties)
 
+    thicknesses_type = "geometric"
+    thicknesses_minimum_dz = 3
+    thicknesses_geomtric_factor = 1.07
+    thicknesses_sigma_background = 0.1
     def make_thicknesses(self):
-        # HACK FOR NOW
-        n_layer = 30
-        return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization(n_layer-1, 3, 1.07)
-        
-        if "dep_top" in self.xyz.layer_params:
-            return np.diff(self.xyz.layer_params["dep_top"].values)
-        return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization_time(
-            np.sort(np.concatenate(inv.times)),
-            sigma_background=0.1,
-            n_layer=self.n_layer-1
-        )
+        if self.thicknesses_type == "geometric":
+            return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization(
+                self.n_layer-1, self.thicknesses_minimum_dz, self.thicknesses_geomtric_factor)
+        else:
+            if "dep_top" in self.xyz.layer_params:
+                return np.diff(self.xyz.layer_params["dep_top"].values)
+            return SimPEG.electromagnetics.utils.em1d_utils.get_vertical_discretization_time(
+                np.sort(np.concatenate(self.times)),
+                sigma_background=self.thicknesses_sigma_background,
+                n_layer=self.n_layer-1
+            )
 
     def make_misfit_weights(self, thicknesses):
         dobs, uncertainties = self.make_data_uncert_array()
