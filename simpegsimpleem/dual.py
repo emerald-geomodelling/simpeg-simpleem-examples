@@ -51,15 +51,15 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
     
     @property
     def area(self):
-        return self.gex['General']['TxLoopArea']
+        return self.gex.General['TxLoopArea']
     
     @property
     def waveform_hm(self):
-        return self.gex['General']['WaveformHMPoint']
+        return self.gex.General['WaveformHMPoint']
     
     @property
     def waveform_lm(self):
-        return self.gex['General']['WaveformLMPoint']
+        return self.gex.General['WaveformLMPoint']
 
     @property
     def lm_data(self):
@@ -67,7 +67,7 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         dbdt = dbdt * self.xyz.model_info.get("scalefactor", 1)
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch1gt == 0, np.nan, dbdt)
-        return -(dbdt*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+        return -(dbdt*self.gex.Channel1['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
     
     @property
     def hm_data(self):
@@ -75,15 +75,15 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
         dbdt = dbdt * self.xyz.model_info.get("scalefactor", 1)
         if "dbdt_inuse_ch1gt" in self.xyz.layer_data:
             dbdt = np.where(self.xyz.dbdt_inuse_ch2gt == 0, np.nan, dbdt)
-        return -(dbdt*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+        return -(dbdt*self.gex.Channel2['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
     
     @property
     def lm_std(self):
-        return (self.xyz.dbdt_std_ch1gt.values*self.gex['Channel1']['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
+        return (self.xyz.dbdt_std_ch1gt.values*self.gex.Channel1['GateFactor'])[:,self.gate_start_lm:self.gate_end_lm]
     
     @property
     def hm_std(self):
-        return (self.xyz.dbdt_std_ch2gt.values*self.gex['Channel2']['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
+        return (self.xyz.dbdt_std_ch2gt.values*self.gex.Channel2['GateFactor'])[:,self.gate_start_hm:self.gate_end_hm]
 
     @property
     def data_array_nan(self):
@@ -107,11 +107,8 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
 
     @property
     def times_full(self):
-        import emeraldprocessing.tem
-        lmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel1')[:,0]
-        hmtimes = emeraldprocessing.tem.getGateTimesFromGEX(self.gex, 'Channel2')[:,0]
-        return (np.array(lmtimes),
-                np.array(hmtimes))    
+        return (np.array(self.gex.gate_times('Channel1')[:,0]),
+                np.array(self.gex.gate_times('Channel2')[:,0]))    
     
     @property
     def times(self):
@@ -132,9 +129,9 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
     def make_system(self, idx, location, times):
         # FIXME: Martin says set z to altitude, not z (subtract topo), original code from seogi doesn't work!
         # Note: location[2] is already == altitude
-        receiver_location = (location[0] + self.gex['General']['RxCoilPosition'][0],
+        receiver_location = (location[0] + self.gex.General['RxCoilPosition'][0],
                              location[1],
-                             location[2] + np.abs(self.gex['General']['RxCoilPosition'][2]))
+                             location[2] + np.abs(self.gex.General['RxCoilPosition'][2]))
         waveform_lm, waveform_hm = self.make_waveforms()        
 
         return [
