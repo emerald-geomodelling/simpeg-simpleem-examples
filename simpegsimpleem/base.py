@@ -34,6 +34,43 @@ import scipy.stats
 
 
 class XYZSystem(object):
+    """This is a base class for system descriptions for moving EM
+    acquisition platforms such as AEM (aerial EM), TTEM (towed time
+    domain EM). The base assumption and simplification provided by
+    this class is that the setup of receiver(s) and transmitter(s) is
+    independent of the data, save for their absolute positions (but
+    relative positions are still independent from data).
+
+    Each subclass of this class, describes a particular setup of
+    transmitters, receivers including dipole moments, waveforms,
+    positions etc, as well as inversion parameters.
+
+    A subclass can then be instantiated together with an XYZ file
+    structure with raw data read using libaarhusxyz.XYZ(), to form an
+    invertible object, or with a model read using the same library to
+    do forward modelling.
+
+    Basic usage:
+
+    ```
+    class MySystem(XYZSystem):
+        def make_system(self, idx, location, times):
+            # Your code here
+
+    inv = MySystem(libaarhusxyz.XYZ("measured.xyz"))
+    sparse, l2 = inv.invert()
+    sparse.dump("sparse.xyz")
+    l2.dump("l2.xyz")
+    ```
+
+    Not that any class level attribute, such as `n_layer`, can be
+    overridden by a parameter when instantiating the class, e.g. 
+
+    ```
+    MySystem(libaarhusxyz.XYZ("measured.xyz"), n_layer=10)
+    ```
+    """
+    
     n_layer=30
     start_res=100
     
@@ -50,6 +87,17 @@ class XYZSystem(object):
         return object.__getattribute__(self, name)
         
     def make_system(self, idx, location, times):
+        """This method should return a list of instances of some
+        SimPEG.survey.BaseSrc subclass, such as
+        SimPEG.electromagnetics.time_domain.sources.MagDipole.
+
+        idx is an index into self.xyz.flightlines
+        location is a tuple (x, y, z) corresponding to the coordinates
+            found at that index in self.xyz.flightlines
+        times is whatever is returned by self.times, typically a list
+            of gate times, or for a multi channel system, a tuple of
+            such lists, one for each channel.
+        """
         raise NotImplementedError("You must subclass XYZInversion and override make_system() with your own method!")
 
     @property
@@ -122,6 +170,7 @@ class XYZSystem(object):
     alpha_z = 1.
     def make_regularization(self, thicknesses):
         if False:
+            assert False, "LCI is currently broken"
             hz = np.r_[thicknesses, thicknesses[-1]]
             reg = LaterallyConstrained(
                 get_2d_mesh(len(self.xyz.flightlines), hz),
@@ -138,6 +187,7 @@ class XYZSystem(object):
         else:
             coords = self.xyz.flightlines[[self.xyz.x_column, self.xyz.y_column]].astype(float).values
             # FIXME: Triangulation fails if all coords are on a line, as in a typical synthetic case...
+            # Ideally, shouldn't this degrade gracefully to an LCI?
             coords[:,1] += np.random.randn(len(coords)) * 5 #1e-10
             tri = Delaunay(coords)
             hz = np.r_[thicknesses, thicknesses[-1]]
@@ -206,6 +256,12 @@ class XYZSystem(object):
         return xyzsparse
     
     def invert(self):
+        """Invert the data from the XYZ file using this system description and
+        inversion parameters.
+
+        Returns a sparse model and an l2 (smooth model), both in xyz format.
+        """
+        
         self.inv = self.make_inversion()
         
         recovered_model = self.inv.run(self.inv.invProb.reg.mref)
@@ -232,6 +288,8 @@ class XYZSystem(object):
         return xyzresp
     
     def forward(self):
+        """Does a forward modelling of the model in the XYZ file using
+        this system description. Returns data in xyz format."""
         # self.inv.invProb.dmisfit.simulation
         self.sim = self.make_forward()
 

@@ -34,6 +34,21 @@ import scipy.stats
 from . import base
 
 class DualMomentTEMXYZSystem(base.XYZSystem):
+    """Dual moment system, suitable for describing e.g. the SkyTEM
+    instruments. This class can not be directly instantiated, but
+    instead, instantiable subclasses can created using the class
+    method
+
+    ```
+    MySurveyInstrument = DualMomentTEMXYZSystem.load_gex(
+        libaarhusxyz.GEX("instrument.gex"))
+    ```
+
+    which reads a gex file containing among other things the waveform
+    description of the instrument.
+
+    See the help for `XYZSystem` for more information on basic usage.
+    """
     gate_start_lm=5
     gate_end_lm=11
     gate_start_hm=12
@@ -44,6 +59,10 @@ class DualMomentTEMXYZSystem(base.XYZSystem):
     
     @classmethod
     def load_gex(cls, gex):
+        """Accepts a GEX file loaded using libaarhusxyz.GEX() and
+        returns a new subclass of XYZSystem that can be used to do
+        inversion and forward modelling."""
+        
         class GexSystem(cls):
             pass
         GexSystem.gex = gex

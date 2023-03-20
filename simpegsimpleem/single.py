@@ -4,6 +4,11 @@ import numpy as np
 from . import base
 
 class SingleMomentTEMXYZSystem(base.XYZSystem):
+    """A very simple system description, suitable for working with
+    synthetic data. It has a single transmitter with a perfect step
+    function shut off, and a single receiver. It requires no setup.
+    """
+    
     area = 340
     i_max = 1
     rx_orientation = 'z'
