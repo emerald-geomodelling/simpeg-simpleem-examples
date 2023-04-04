@@ -22,6 +22,6 @@ setuptools.setup(
         "discretize",
         "simpeg @ git+https://github.com/emerald-geomodelling/simpeg.git@em1d_updates#egg=SimPEG",
         "simpegEM1D",
-        "libaarhusxyz",
+        "libaarhusxyz @ git+https://github.com/emerald-geomodelling/libaarhusxyz.git@normalization#egg=libaarhusxyz",
     ],
 )
