@@ -4,7 +4,7 @@ A simple wrapper around SimPEG for EM inversion of data where the instrument set
 
 ```
 import libaarhusxyz
-import simpegsimpleem
+import import SimPEG.electromagnetics.utils.static_instrument.single
 ```
 
 ```
@@ -15,7 +15,7 @@ xyz.plot_line(0)
 ![image](https://user-images.githubusercontent.com/104229/231162050-c354e1f6-e0e4-4e93-aef6-44e20add3ed0.png)
 
 ```
-class MySystem(simpegsimpleem.SingleMomentTEMXYZSystem):
+class MySystem(import SimPEG.electromagnetics.utils.static_instrument.single.SingleMomentTEMXYZSystem):
     area=340
     i_max=1
 ```
