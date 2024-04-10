@@ -1,6 +1,9 @@
 # experimental-simpeg-ext
 
-A simple wrapper around SimPEG for EM inversion of data where the instrument setup does not change between soundings.
+SimpleEM is a simple wrapper around SimPEG for EM inversion of data where the instrument setup does not change between soundings.
+
+This repository contains example notebooks showcasing how to use this for synthetic data and measured data delivered in xyz format.
+
 
 ```
 import libaarhusxyz
