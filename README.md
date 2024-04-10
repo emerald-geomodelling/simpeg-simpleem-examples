@@ -7,7 +7,7 @@ This repository contains example notebooks showcasing how to use this for synthe
 
 ```
 import libaarhusxyz
-import import SimPEG.electromagnetics.utils.static_instrument.single
+import SimPEG.electromagnetics.utils.static_instrument.single
 ```
 
 ```
@@ -18,7 +18,7 @@ xyz.plot_line(0)
 ![image](https://user-images.githubusercontent.com/104229/231162050-c354e1f6-e0e4-4e93-aef6-44e20add3ed0.png)
 
 ```
-class MySystem(import SimPEG.electromagnetics.utils.static_instrument.single.SingleMomentTEMXYZSystem):
+class MySystem(SimPEG.electromagnetics.utils.static_instrument.single.SingleMomentTEMXYZSystem):
     area=340
     i_max=1
 ```
