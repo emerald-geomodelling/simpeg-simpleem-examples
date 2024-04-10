@@ -2,12 +2,5 @@ utm
 projnames
 jupyter
 psutil
-poltergust-luigi-utils
-
-# #git+https://github.com/emerald-geomodelling/simpeg.git@simpleem3#egg=SimPEG
-git+https://github.com/emerald-geomodelling/simpeg.git@Burningsage_less_prints#egg=SimPEG
-
-
-# #git+https://github.com/emerald-geomodelling/libaarhusxyz.git@master#egg=libaarhusxyz
-# #git+https://github.com/emerald-geomodelling/libaarhusxyz.git@Ben_tweak_colorlimits#egg=libaarhusxyz
-git+https://github.com/emerald-geomodelling/libaarhusxyz.git@xyz_profile_clim#egg=libaarhusxyz
+git+https://github.com/emerald-geomodelling/simpeg.git@simpleem3#egg=SimPEG
+git+https://github.com/emerald-geomodelling/libaarhusxyz.git@master#egg=libaarhusxyz
