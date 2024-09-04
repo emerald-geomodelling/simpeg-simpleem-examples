@@ -1,4 +1,4 @@
-# experimental-simpeg-ext
+# simpeg-simpleem-examples
 
 SimpleEM is a simple wrapper around SimPEG for EM inversion of data where the instrument setup does not change between soundings.
 
